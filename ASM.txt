@@ -1,0 +1,173 @@
+Automatic Storage Management (ASM) is introduced by Oracle from Oracle 10gR1.
+It will allow DBA's to control volumes directly inside the database.
+Oracle itself manages how to store data inside the disks. 
+so we call OMF files in ASM. OMF (Oracle Managed Files). 
+With the help of ASM you can increase the diskspace so called vertical scalability. 
+We can say that with the help of ASM we can add new disk to the existing diskgroup. 
+We create a diskgroup in ASM and we assign diskgroup to the database.
+In the furture we can discuss how we assign as disk to the diskgroup.
+The data FROM the CLIENT or USER is stored inside the diskgroups.
+we talk about ASM instance here. 
+
+What is an INSTANCE?
+
+ it defined technically oracle server allocates some memory to perform some operations 
+and a background process together is called an Instance. When we are trying to Implement 
+ASM we need to fallow a procedure to Install it. 
+
+##########################################################################
+check how much disk space is allocated/ in-use by an ASM instance
+
+SQL>SELECT name, free_mb, total_mb, free_mb/total_mb*100 "%" FROM v$asm_diskgroup;
+SQL>SELECT name, free_mb, total_mb, free_mb/total_mb*100 "%" FROM v$asm_disk;
+
+SQL>select INSTANCE_NAME from v$INSTANCE;
+SQL>select NAME,PATH,MODE_STATUS,GROUP_NUMBER FROM V$ASM_DISK;
+
+Query v$DIAG_INFO view from the ASM instance to review all diagnostic information from the ASM instance
+SQL>select name,value from v$diag_info;
+
+To create ASM USER in ASM Instance;
+SQL>create user ASMUSER IDENTIFIED BY ASMUSER;
+SQL> grant SYSASM, SYSOPER TO ASMUSER;
+
+To connect as ASM USER?
+$ sqlplus "ASMUSER/ASMUSER as sysasm"
+
+In 11g, the ASM SYSOPER privilege has responsibilities similar to those of a database SYSOPER. for other commands SYSOPER need SYSOPER Privilege.
+Fallowing commands are available to SYSOPER users;
+Startup/shutdown;
+alter diskgroup mount/nomount;
+alter diskgroup online/offline disk;
+alter diskgroup rebalance;
+alter diskgroup check;((data files disk group verification))
+
+
+####################################################################
+as SYSASM
+how to create pfile from spfile 
+
+SQL> create pfile='$GRID_HOME/dbs/init+ASM.ora' from spfile;
+File created.
+
+
+ASM parameters
+$ cat /home/oracle/pfile.ora
++ASM1.__shared_pool_size=507510784
++ASM1.asm_diskgroups=’DATA’,’DATA01’,'DATA02'#Manual Mount
+*.asm_diskstring=’/dev/sd*’
+*.asm_power_limit=1
+*.diagnostic_dest=’/u01/app/oracle’
+*.instance_type=’asm’
+*.large_pool_size=12M
+*.remote_login_passwordfile=’SHARED’
+
+
+#####################################################################
+
+SQL> Determine the sector size value that has either been assumed 
+or explicitly set for a successful disk group creation by querying the V$ASM_ATTRIBUTE 
+view or run the ASMCMD lsattr command. You can also query the SECTOR_SIZE column in the V$ASM_DISKGROUP view.
+
+
+SQL> SELECT name, value FROM V$ASM_ATTRIBUTE 
+     WHERE name = 'sector_size' AND group_number = 1;
+NAME                        VALUE
+--------------------------- -----------------------
+sector_size                 512
+
+
+SQL> SELECT group_number, sector_size FROM V$ASM_DISKGROUP 
+     WHERE group_number = 1;
+
+GROUP_NUMBER SECTOR_SIZE
+------------ -----------
+           1         512
+
+SQL> CREATE DISKGROUP LEO External REDUNDANCY disk 'ORCL:PHYSC','ORCL:PHYSC1','ORCL:PHYSC0' ATTRIBUTE 'au_size'='4M','compatible.asm' = '11.2', 'compatible.rdbms' = 11.2', 'compatible.advm' = 11.2';
+
+CREATE DISKGROUP GGS External REDUNDANCY disk
+'/dev/rhdiskpower94',
+'/dev/rhdiskpower95',
+'/dev/rhdiskpower96',
+'/dev/rhdiskpower97',
+'/dev/rhdiskpower105'
+ATTRIBUTE 'au_size'='1M','compatible.asm' = '11.2',
+'compatible.rdbms' = 11.2', 'compatible.advm' = 11.2';
+
+#########################################################################
+
+SQL> CREATE DISKGROUP DGNAME NORMAL REDUNDANCY
+FAILGROUP FGNAME1 DISK
+'/devices/diska1',
+'/devices/diska2',
+'/devices/diska3',
+'/devices/diska4'
+FAILGROUP FGNAME2 DISK
+'/devices/diskb1',
+'/devices/diskb2',
+'/devices/diskb3',
+'/devices/diskb4'
+ATTRIBUTE 
+'au_size'='4M'
+'compatible.asm' = '11.2', 
+'compatible.rdbms' = '11.2',
+'sector_size'='4096';
+
+SQL> CREATE DISKGROUP LEO EXTERNAL REDUNDANCY DISK 'ORCL:PHYSC1','ORCL:PHYSC0' 
+ATTRIBUTE 'compatible.asm' = '11.2';
+
+SQL> SELECT group_number, name, compatibility, database_compatibility FROM v$asm_diskgroup;
+
+SQL> drop diskgroup ctzdba including contents;
+
+Diskgroup dropped
+
+
+adding a disk to diskgroup & rebalancing ~~
+
+set col path for a30;
+SQL> select path,DISK_NUMBER,GROUP_NUMBER from v$asm_disk;
+PATH                           DISK_NUMBER GROUP_NUMBER
+------------------------------ ----------- ------------
+ORCL:NIKHIL01                            0            0
+ORCL:NIKHIL02                            1            0
+ORCL:DATA03                              2            0
+ORCL:DATA04                              3            0
+ORCL:FLASH02                             5            0
+ORCL:FLASH01                             4            0
+ORCL:DATA01                              0            1
+ORCL:DATA02                              1            1
+
+
+ALTER DISKGROUP DATA ADD DISK 'ORCL:NIKHIL01' NAME NIKHIL01;
+
+rebalancing ~~
+alter system set asm_power_limit=10;
+
+##########################################################################
+
+::::::::Managing Volumes in a Disk Group::
+
+You can create an Oracle ASM Dynamic Volume Manager (Oracle ADVM) volume in a disk group. 
+The volume device associated with the dynamic volume can then be used to host an Oracle ACFS file system.
+
+The compatibility parameters COMPATIBLE.ASM and COMPATIBLE.ADVM must be set to 11.2 or higher for the disk group.
+The ALTER DISKGROUP VOLUME SQL statements enable you to manage Oracle ADVM volumes, 
+including the functionality to add, resize, disable, enable, and drop volumes.
+
+SQL> ALTER DISKGROUP data ADD VOLUME volume1 SIZE 10G;
+Diskgroup altered.
+SQL> ALTER DISKGROUP data RESIZE VOLUME volume1 SIZE 15G;
+Diskgroup altered.
+SQL> ALTER DISKGROUP data DISABLE VOLUME volume1;
+Diskgroup altered.
+SQL> ALTER DISKGROUP data ENABLE VOLUME volume1;
+Diskgroup altered.
+SQL> ALTER DISKGROUP ALL DISABLE VOLUME ALL;
+Diskgroup altered.
+SQL> ALTER DISKGROUP data DROP VOLUME volume1;
+Diskgroup altered.
+
+
+
